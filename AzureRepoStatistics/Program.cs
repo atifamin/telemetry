@@ -2,12 +2,17 @@
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Data;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Azure;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Blob;
+using System.IO;
 
 namespace AzureRepoStatistics
 {
@@ -19,17 +24,19 @@ namespace AzureRepoStatistics
         private static Microsoft.Office.Interop.Excel.Application oXL;
         static void Main(string[] args)
         {
-            //return;
-            connectRepo();
+            ConnectRepo();
+            UploadToAzureBlob();
         }
-        static void connectRepo()
+        static void ConnectRepo()
         {
 
 
-            DateTime date = new DateTime(2020, 6, 5); ///DateTime.Now.AddDays(-1);
+            DateTime endDate = new DateTime(2020, 6, 8);//DateTime.Now;
+            DateTime startDate = endDate.AddDays(-1);
+
             GitApi api = new GitApi();
 
-            DataTable data = api.SearchRepo(date);
+            DataTable data = api.ProcessRepo(startDate,endDate);
 
 
 
@@ -37,6 +44,7 @@ namespace AzureRepoStatistics
             DataTable dataFilter = data.Select("Status ='added'").CopyToDataTable();
             DataTable dataAdded = dataFilter.AsEnumerable()
                           .GroupBy(g => new { ActivityDate = g["ActivityDate"], GitUser = g["GitUser"], AccountType = g["AccountType"] })
+                          .OrderBy(o => o.Key.ActivityDate)
                           .Select(s =>
                           {
                               var row = data.NewRow();
@@ -62,6 +70,7 @@ namespace AzureRepoStatistics
             dataFilter = data.Select("Status ='modified'").CopyToDataTable();
             DataTable dataModified = dataFilter.AsEnumerable()
                           .GroupBy(g => new { ActivityDate = g["ActivityDate"], GitUser = g["GitUser"], AccountType = g["AccountType"] })
+                          .OrderBy(o => o.Key.ActivityDate)
                           .Select(s =>
                           {
                               var row = data.NewRow();
@@ -84,20 +93,16 @@ namespace AzureRepoStatistics
                           })
                           .CopyToDataTable();
 
-            
             ExportToExcel(dataAdded, dataModified);
 
 
         }
 
-
-
         static void ExportToExcel(DataTable dataAdded, DataTable dataModified)
         {
             Console.WriteLine("Writing to Excel file");
-
-            string path = string.Concat(System.IO.Directory.GetCurrentDirectory(), "\\data\\template.xlsx");
-            string newPath = string.Concat(System.IO.Directory.GetCurrentDirectory(), string.Format("\\data\\data_{0}.xls",DateTime.Now.ToString("yyyy-MM-dd")));
+            string fileName = ConfigurationManager.AppSettings["template_filename"];
+            string path = string.Concat(System.IO.Directory.GetCurrentDirectory(), fileName);
             oXL = new Microsoft.Office.Interop.Excel.Application();
             oXL.Visible = false;
             oXL.DisplayAlerts = false;
@@ -107,50 +112,49 @@ namespace AzureRepoStatistics
 
             //Write to New Contribution
             mWSheet1 = (Microsoft.Office.Interop.Excel.Worksheet)mWorkSheets.get_Item("GitHub New Contribution");
-            int index = 2;
+            Microsoft.Office.Interop.Excel.Range range = mWSheet1.UsedRange;
+            int colCount = range.Columns.Count;
+            int rowCount = range.Rows.Count;
+            int index = 1;
             foreach (DataRow item in dataAdded.Rows)
             {
-                mWSheet1.Cells[index, 1] = item["ActivityDate"];
-                mWSheet1.Cells[index, 2] = item["GitUser"];
-                mWSheet1.Cells[index, 3] = item["AccountType"];
-                mWSheet1.Cells[index, 4] = item["TotalContribution"];
-                mWSheet1.Cells[index, 5] = item["DataConnectors"];
-                mWSheet1.Cells[index, 6] = item["Workbooks"];
-                mWSheet1.Cells[index, 7] = item["Playbooks"];
-                mWSheet1.Cells[index, 8] = item["Exploration Queries"];
-                mWSheet1.Cells[index, 9] = item["Hunting Queries"];
-                mWSheet1.Cells[index, 10] = item["Sample Data"];
-                mWSheet1.Cells[index, 11] = item["Tools"];
-                mWSheet1.Cells[index, 12] = item["Detections"];
-                mWSheet1.Cells[+index, 13] = item["Notebooks @ efbace2"];
+                mWSheet1.Cells[rowCount+ index, 1] = item["ActivityDate"];
+                mWSheet1.Cells[rowCount + index, 2] = item["GitUser"];
+                mWSheet1.Cells[rowCount + index, 3] = item["AccountType"];
+                mWSheet1.Cells[rowCount + index, 4] = item["TotalContribution"];
+                mWSheet1.Cells[rowCount + index, 5] = item["DataConnectors"];
+                mWSheet1.Cells[rowCount + index, 6] = item["Workbooks"];
+                mWSheet1.Cells[rowCount + index, 7] = item["Playbooks"];
+                mWSheet1.Cells[rowCount + index, 8] = item["Exploration Queries"];
+                mWSheet1.Cells[rowCount + index, 9] = item["Hunting Queries"];
+                mWSheet1.Cells[rowCount + index, 10] = item["Sample Data"];
+                mWSheet1.Cells[rowCount + index, 11] = item["Tools"];
+                mWSheet1.Cells[rowCount + index, 12] = item["Detections"];
+                mWSheet1.Cells[rowCount + index, 13] = item["Notebooks @ efbace2"];
                 index++;
             }
 
-            //Write to New Contribution
+            //Write to Update Contribution
             mWSheet1 = (Microsoft.Office.Interop.Excel.Worksheet)mWorkSheets.get_Item("GitHub Update Contribution");
-            index = 2;
+            index = 1;
             foreach (DataRow item in dataModified.Rows)
             {
-                mWSheet1.Cells[index, 1] = item["ActivityDate"];
-                mWSheet1.Cells[index, 2] = item["GitUser"];
-                mWSheet1.Cells[index, 3] = item["AccountType"];
-                mWSheet1.Cells[index, 4] = item["TotalContribution"];
-                mWSheet1.Cells[index, 5] = item["DataConnectors"];
-                mWSheet1.Cells[index, 6] = item["Workbooks"];
-                mWSheet1.Cells[index, 7] = item["Playbooks"];
-                mWSheet1.Cells[index, 8] = item["Exploration Queries"];
-                mWSheet1.Cells[index, 9] = item["Hunting Queries"];
-                mWSheet1.Cells[index, 10] = item["Sample Data"];
-                mWSheet1.Cells[index, 11] = item["Tools"];
-                mWSheet1.Cells[index, 12] = item["Detections"];
-                mWSheet1.Cells[+index, 13] = item["Notebooks @ efbace2"];
+                mWSheet1.Cells[rowCount + index, 1] = item["ActivityDate"];
+                mWSheet1.Cells[rowCount + index, 2] = item["GitUser"];
+                mWSheet1.Cells[rowCount + index, 3] = item["AccountType"];
+                mWSheet1.Cells[rowCount + index, 4] = item["TotalContribution"];
+                mWSheet1.Cells[rowCount + index, 5] = item["DataConnectors"];
+                mWSheet1.Cells[rowCount + index, 6] = item["Workbooks"];
+                mWSheet1.Cells[rowCount + index, 7] = item["Playbooks"];
+                mWSheet1.Cells[rowCount + index, 8] = item["Exploration Queries"];
+                mWSheet1.Cells[rowCount + index, 9] = item["Hunting Queries"];
+                mWSheet1.Cells[rowCount + index, 10] = item["Sample Data"];
+                mWSheet1.Cells[rowCount + index, 11] = item["Tools"];
+                mWSheet1.Cells[rowCount + index, 12] = item["Detections"];
+                mWSheet1.Cells[rowCount + index, 13] = item["Notebooks @ efbace2"];
                 index++;
             }
-
-            mWorkBook.SaveAs(newPath, Microsoft.Office.Interop.Excel.XlFileFormat.xlWorkbookDefault,
-            Missing.Value, Missing.Value, Missing.Value, Missing.Value, Microsoft.Office.Interop.Excel.XlSaveAsAccessMode.xlExclusive,
-            Missing.Value, Missing.Value, Missing.Value,
-            Missing.Value, Missing.Value);
+            mWorkBook.Save();
             mWorkBook.Close(Missing.Value, Missing.Value, Missing.Value);
             mWSheet1 = null;
             mWorkBook = null;
@@ -160,12 +164,55 @@ namespace AzureRepoStatistics
             GC.WaitForPendingFinalizers();
             GC.Collect();
 
-            Console.WriteLine("Excel file has been save at location: " + Environment.NewLine + newPath);
+            Console.WriteLine("Excel file has been save at location: " + Environment.NewLine + path);
+            
+        }
+
+        static void UploadToAzureBlob()
+        {
+            Console.Write("Uploading file to Azure cloud storage");
+
+            string storageConnection = ConfigurationManager.AppSettings["blobstorage_connectionstring"];
+            string storageContainer = ConfigurationManager.AppSettings["blobstorage_container"];
+            string fileName = ConfigurationManager.AppSettings["template_filename"];
+            string filePath = string.Concat(System.IO.Directory.GetCurrentDirectory(), fileName);
+
+            CloudStorageAccount cloudStorageAccount = CloudStorageAccount.Parse(storageConnection);
+            //create a block blob 
+            CloudBlobClient cloudBlobClient = cloudStorageAccount.CreateCloudBlobClient();
+
+            //create a container 
+            CloudBlobContainer cloudBlobContainer = cloudBlobClient.GetContainerReference(storageContainer);
+
+            //create a container if it is not already exists
+            if (cloudBlobContainer.CreateIfNotExists())
+            {
+                cloudBlobContainer.SetPermissionsAsync(new BlobContainerPermissions { PublicAccess = BlobContainerPublicAccessType.Blob });
+            }
+
+
+            var imageToUpload = System.IO.File.OpenRead(filePath);
+
+
+            //get Blob reference
+            CloudBlockBlob cloudBlockBlob = cloudBlobContainer.GetBlockBlobReference(storageContainer);
+            var ext = Path.GetExtension(imageToUpload.Name).Split('.');
+            cloudBlockBlob.Properties.ContentType = ext[1];
+
+            // Upload using the UploadFromStream method.
+            using (var stream = System.IO.File.OpenRead(filePath))
+                cloudBlockBlob.UploadFromStream(stream, stream.Length, null, null, null);
+
+            Console.WriteLine("");
+            Console.Write("Uploading file to Azure cloud storage has been completed");
+            
+            Console.WriteLine("");
             Console.WriteLine("");
             Console.WriteLine("");
             Console.WriteLine("Process has been completed, press any key to exit.");
             Console.ReadKey();
         }
+
     }
 
 }

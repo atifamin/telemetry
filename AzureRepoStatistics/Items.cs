@@ -14,5 +14,6 @@ namespace AzureRepoStatistics
         public User user { get; set; }
         public PullRequest pull_request { get; set; }
         public DateTime created_at { get; set; }
+        public DateTime closed_at { get; set; }
     }
 }
