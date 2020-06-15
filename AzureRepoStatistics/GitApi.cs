@@ -191,7 +191,7 @@ namespace AzureRepoStatistics
                                 string email = (user.email == null ? "" : user.email.ToLower());
                                 string company = (user.company == null ? "" : user.company.ToLower());
                                 //Check if External or MSFT user
-                                if (email.Contains("microsoft") || company.Contains("microsoft"))
+                                if (email.Contains("microsoft") || company.Contains("microsoft") || company.Equals("msft") || company.Equals("ms"))
                                     dr["AccountType"] = "MSFT";
                                 else
                                     dr["AccountType"] = "External";
