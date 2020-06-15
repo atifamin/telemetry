@@ -32,7 +32,8 @@ namespace AzureRepoStatistics
         {
             Console.WriteLine("Setup Data Table");
             
-            _dt.Columns.Add("ActivityDate", typeof(DateTime));
+            _dt.Columns.Add("StartDate", typeof(DateTime));
+            _dt.Columns.Add("EndDate", typeof(DateTime));
             _dt.Columns.Add("GitUser", typeof(string));
             _dt.Columns.Add("AccountType", typeof(string));
             _dt.Columns.Add("Status", typeof(string));
@@ -64,15 +65,25 @@ namespace AzureRepoStatistics
         public DataTable ProcessRepo(DateTime startDate, DateTime endDate)
         {
             SetupDataTable();
-            SearchRepo(startDate);
-            SearchRepo(endDate);
 
-            SearchNotesRepo(startDate);
-            SearchNotesRepo(endDate);
+            DateTime date = startDate;
+            while (date <= endDate)
+            {
+                SearchRepo(date,startDate,endDate);
+                SearchNotesRepo(date,startDate,endDate);
+                date = date.AddDays(1);
+
+            }
+
+            //SearchRepo(startDate);
+            //SearchRepo(endDate);
+
+            //SearchNotesRepo(startDate);
+            //SearchNotesRepo(endDate);
 
             return _dt; 
         }
-        public void SearchRepo(DateTime date)
+        public void SearchRepo(DateTime date,DateTime startDate, DateTime endDate)
         {
             Console.WriteLine(string.Format("Fetching {0} from {1} Repo", date.ToShortDateString(), _repo));
 
@@ -105,7 +116,8 @@ namespace AzureRepoStatistics
                             if (file.status == "added" || file.status == "modified")
                             {
                                 DataRow dr = _dt.NewRow();
-                                dr["ActivityDate"] = item.closed_at.ToShortDateString(); //only date 
+                                dr["StartDate"] = startDate.ToShortDateString(); //only date 
+                                dr["EndDate"] = endDate.ToShortDateString(); //only date 
                                 dr["GitUser"] = item.user.login;
                                 dr["Status"] = file.status;
                                 dr[folder] = 1;
@@ -115,7 +127,7 @@ namespace AzureRepoStatistics
                                 string email = (user.email == null ? "" : user.email.ToLower());
                                 string company = (user.company == null ? "" : user.company.ToLower());
                                 //Check if External or MSFT user
-                                if (email.Contains("microsoft") || company.Contains("microsoft"))
+                                if (email.Contains("microsoft") || company.Contains("microsoft") || company.Equals("msft") || company.Equals("ms"))
                                     dr["AccountType"] = "MSFT";
                                 else
                                     dr["AccountType"] = "External";
@@ -130,7 +142,7 @@ namespace AzureRepoStatistics
             }
 
         }
-        public void SearchNotesRepo(DateTime date)
+        public void SearchNotesRepo(DateTime date,DateTime startDate,DateTime endDate)
         {
 
             Console.WriteLine(string.Format("Fetching {0} from {1} Repo", date.ToShortDateString(), _notesRepo));
@@ -162,7 +174,8 @@ namespace AzureRepoStatistics
                         if (file.status == "added" || file.status == "modified")
                         {
                             DataRow dr = _dt.NewRow();
-                            dr["ActivityDate"] = item.closed_at.ToShortDateString(); //only date 
+                            dr["StartDate"] = startDate.ToShortDateString(); //only date 
+                            dr["EndDate"] = endDate.ToShortDateString(); //only date 
                             dr["GitUser"] = item.user.login;
                             dr["Status"] = file.status;
                             dr["Notebooks @ efbace2"] = 1;

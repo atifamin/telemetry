@@ -30,8 +30,8 @@ namespace AzureRepoStatistics
         static void ConnectRepo()
         {
 
-            //DateTime endDate = DateTime.Now;
-            DateTime endDate = new DateTime(2020, 6, 8);//DateTime.Now;
+            DateTime endDate = DateTime.Now;
+            //DateTime endDate = new DateTime(2020, 6, 8);
             DateTime startDate = endDate.AddDays(-1);
 
             GitApi api = new GitApi();
@@ -39,30 +39,25 @@ namespace AzureRepoStatistics
             DataTable data = api.ProcessRepo(startDate,endDate);
 
             //added files datatable 
-            DataRow[] rows = data.Select(string.Format("Status ='modified' AND ActivityDate='{0}'", startDate.ToString("yyyy-MM-dd")));
+            DataRow[] rows = data.Select(string.Format("Status ='added' AND StartDate='{0}'", startDate.ToString("yyyy-MM-dd")));
             if (rows.Count() == 0)
             {
                 var row = data.NewRow();
-                row["ActivityDate"] = startDate;
+                row["StartDate"] = startDate.ToShortDateString();
+                row["EndDate"] = endDate.ToShortDateString();
                 row["Status"] = "added";
                 data.Rows.Add(row);
             }
-            rows = data.Select(string.Format("Status ='modified' AND ActivityDate='{0}'", endDate.ToString("yyyy-MM-dd")));
-            if (rows.Count() == 0)
-            {
-                var row = data.NewRow();
-                row["ActivityDate"] = endDate;
-                row["Status"] = "added";
-                data.Rows.Add(row);
-            }
+
             DataTable dataFilter = data.Select("Status ='added'").CopyToDataTable();
             DataTable dataAdded = dataFilter.AsEnumerable()
-                          .GroupBy(g => new { ActivityDate = g["ActivityDate"], GitUser = g["GitUser"], AccountType = g["AccountType"] })
-                          .OrderBy(o => o.Key.ActivityDate)
+                          .GroupBy(g => new { StartDate = g["StartDate"], EndDate = g["EndDate"], GitUser = g["GitUser"], AccountType = g["AccountType"] })
+                          .OrderBy(o => o.Key.StartDate)
                           .Select(s =>
                           {
                               var row = data.NewRow();
-                              row["ActivityDate"] = s.Key.ActivityDate;
+                              row["StartDate"] = s.Key.StartDate;
+                              row["EndDate"] = s.Key.EndDate;
                               row["GitUser"] = s.Key.GitUser;
                               row["AccountType"] = s.Key.AccountType;
                               row["TotalContribution"] = s.Sum(r => r.Field<int>("TotalContribution"));
@@ -81,32 +76,25 @@ namespace AzureRepoStatistics
 
             //modified files datatable 
             //create empty rows if dates note found.
-            rows = data.Select(string.Format("Status ='modified' AND ActivityDate='{0}'", startDate.ToString("yyyy-MM-dd")));
+            rows = data.Select(string.Format("Status ='modified' AND StartDate='{0}'", startDate.ToString("yyyy-MM-dd")));
             if (rows.Count() == 0)
             {
                 var row = data.NewRow();
-                row["ActivityDate"] = startDate;
+                row["StartDate"] = startDate.ToShortDateString();
+                row["EndDate"] = endDate.ToShortDateString();
                 row["Status"] = "modified";
                 data.Rows.Add(row);
             }
-            rows = data.Select(string.Format("Status ='modified' AND ActivityDate='{0}'", endDate.ToString("yyyy-MM-dd")));
-            if (rows.Count() == 0)
-            {
-                var row = data.NewRow();
-                row["ActivityDate"] = endDate;
-                row["AccountType"] = "modified";
-                data.Rows.Add(row);
-            }
-
 
             dataFilter = data.Select("Status ='modified'").CopyToDataTable();
             DataTable dataModified = dataFilter.AsEnumerable()
-                          .GroupBy(g => new { ActivityDate = g["ActivityDate"], GitUser = g["GitUser"], AccountType = g["AccountType"] })
-                          .OrderBy(o => o.Key.ActivityDate)
+                          .GroupBy(g => new { StartDate = g["StartDate"], EndDate = g["EndDate"], GitUser = g["GitUser"], AccountType = g["AccountType"] })
+                          .OrderBy(o => o.Key.StartDate)
                           .Select(s =>
                           {
                               var row = data.NewRow();
-                              row["ActivityDate"] = s.Key.ActivityDate;
+                              row["StartDate"] = s.Key.StartDate;
+                              row["EndDate"] = s.Key.EndDate;
                               row["GitUser"] = s.Key.GitUser;
                               row["AccountType"] = s.Key.AccountType;
                               row["TotalContribution"] = s.Sum(r => r.Field<int>("TotalContribution"));
@@ -132,8 +120,7 @@ namespace AzureRepoStatistics
         {
             Console.WriteLine("Writing to Excel file");
 
-            string fileName = ConfigurationManager.AppSettings["template_filename"];
-            string path = string.Concat(System.IO.Directory.GetCurrentDirectory(), fileName);
+            string path = GetOutputFile();
             oXL = new Microsoft.Office.Interop.Excel.Application();
             oXL.Visible = false;
             oXL.DisplayAlerts = false;
@@ -148,19 +135,20 @@ namespace AzureRepoStatistics
             int index = 1;
             foreach (DataRow item in dataAdded.Rows)
             {
-                mWSheet.Cells[rowCount+ index, 1] = item["ActivityDate"];
-                mWSheet.Cells[rowCount + index, 2] = item["GitUser"];
-                mWSheet.Cells[rowCount + index, 3] = item["AccountType"];
-                mWSheet.Cells[rowCount + index, 4] = item["TotalContribution"];
-                mWSheet.Cells[rowCount + index, 5] = item["DataConnectors"];
-                mWSheet.Cells[rowCount + index, 6] = item["Workbooks"];
-                mWSheet.Cells[rowCount + index, 7] = item["Playbooks"];
-                mWSheet.Cells[rowCount + index, 8] = item["Exploration Queries"];
-                mWSheet.Cells[rowCount + index, 9] = item["Hunting Queries"];
-                mWSheet.Cells[rowCount + index, 10] = item["Sample Data"];
-                mWSheet.Cells[rowCount + index, 11] = item["Tools"];
-                mWSheet.Cells[rowCount + index, 12] = item["Detections"];
-                mWSheet.Cells[rowCount + index, 13] = item["Notebooks @ efbace2"];
+                mWSheet.Cells[rowCount+ index, 1] = item["StartDate"];
+                mWSheet.Cells[rowCount + index, 2] = item["EndDate"];
+                mWSheet.Cells[rowCount + index, 3] = item["GitUser"];
+                mWSheet.Cells[rowCount + index, 4] = item["AccountType"];
+                mWSheet.Cells[rowCount + index, 5] = item["TotalContribution"];
+                mWSheet.Cells[rowCount + index, 6] = item["DataConnectors"];
+                mWSheet.Cells[rowCount + index, 7] = item["Workbooks"];
+                mWSheet.Cells[rowCount + index, 8] = item["Playbooks"];
+                mWSheet.Cells[rowCount + index, 9] = item["Exploration Queries"];
+                mWSheet.Cells[rowCount + index, 10] = item["Hunting Queries"];
+                mWSheet.Cells[rowCount + index, 11] = item["Sample Data"];
+                mWSheet.Cells[rowCount + index, 12] = item["Tools"];
+                mWSheet.Cells[rowCount + index, 13] = item["Detections"];
+                mWSheet.Cells[rowCount + index, 14] = item["Notebooks @ efbace2"];
                 index++;
             }
 
@@ -172,19 +160,20 @@ namespace AzureRepoStatistics
             index = 1;
             foreach (DataRow item in dataModified.Rows)
             {
-                mWSheet.Cells[rowCount + index, 1] = item["ActivityDate"];
-                mWSheet.Cells[rowCount + index, 2] = item["GitUser"];
-                mWSheet.Cells[rowCount + index, 3] = item["AccountType"];
-                mWSheet.Cells[rowCount + index, 4] = item["TotalContribution"];
-                mWSheet.Cells[rowCount + index, 5] = item["DataConnectors"];
-                mWSheet.Cells[rowCount + index, 6] = item["Workbooks"];
-                mWSheet.Cells[rowCount + index, 7] = item["Playbooks"];
-                mWSheet.Cells[rowCount + index, 8] = item["Exploration Queries"];
-                mWSheet.Cells[rowCount + index, 9] = item["Hunting Queries"];
-                mWSheet.Cells[rowCount + index, 10] = item["Sample Data"];
-                mWSheet.Cells[rowCount + index, 11] = item["Tools"];
-                mWSheet.Cells[rowCount + index, 12] = item["Detections"];
-                mWSheet.Cells[rowCount + index, 13] = item["Notebooks @ efbace2"];
+                mWSheet.Cells[rowCount + index, 1] = item["StartDate"];
+                mWSheet.Cells[rowCount + index, 2] = item["EndDate"];
+                mWSheet.Cells[rowCount + index, 3] = item["GitUser"];
+                mWSheet.Cells[rowCount + index, 4] = item["AccountType"];
+                mWSheet.Cells[rowCount + index, 5] = item["TotalContribution"];
+                mWSheet.Cells[rowCount + index, 6] = item["DataConnectors"];
+                mWSheet.Cells[rowCount + index, 7] = item["Workbooks"];
+                mWSheet.Cells[rowCount + index, 8] = item["Playbooks"];
+                mWSheet.Cells[rowCount + index, 9] = item["Exploration Queries"];
+                mWSheet.Cells[rowCount + index, 10] = item["Hunting Queries"];
+                mWSheet.Cells[rowCount + index, 11] = item["Sample Data"];
+                mWSheet.Cells[rowCount + index, 12] = item["Tools"];
+                mWSheet.Cells[rowCount + index, 13] = item["Detections"];
+                mWSheet.Cells[rowCount + index, 14] = item["Notebooks @ efbace2"];
                 index++;
             }
             mWorkBook.Save();
@@ -207,8 +196,8 @@ namespace AzureRepoStatistics
 
             string storageConnection = ConfigurationManager.AppSettings["blobstorage_connectionstring"];
             string storageContainer = ConfigurationManager.AppSettings["blobstorage_container"];
-            string fileName = ConfigurationManager.AppSettings["template_filename"];
-            string filePath = string.Concat(System.IO.Directory.GetCurrentDirectory(), fileName);
+
+            string filePath = GetOutputFile();
 
             CloudStorageAccount cloudStorageAccount = CloudStorageAccount.Parse(storageConnection);
             //create a block blob 
@@ -224,17 +213,17 @@ namespace AzureRepoStatistics
             }
 
 
-            var imageToUpload = System.IO.File.OpenRead(filePath);
-
-
+            var file = System.IO.File.OpenRead(filePath);
+            var name = System.IO.Path.GetFileName(filePath);
+            
             //get Blob reference
-            CloudBlockBlob cloudBlockBlob = cloudBlobContainer.GetBlockBlobReference(storageContainer);
-            var ext = Path.GetExtension(imageToUpload.Name).Split('.');
-            cloudBlockBlob.Properties.ContentType = ext[1];
-
+            CloudBlockBlob cloudBlockBlob = cloudBlobContainer.GetBlockBlobReference(name);
+            cloudBlockBlob.Properties.ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             // Upload using the UploadFromStream method.
             using (var stream = System.IO.File.OpenRead(filePath))
                 cloudBlockBlob.UploadFromStream(stream, stream.Length, null, null, null);
+            
+
 
             Console.WriteLine("");
             Console.Write("Uploading file to Azure cloud storage has been completed");
@@ -246,6 +235,19 @@ namespace AzureRepoStatistics
             Console.ReadKey();
         }
 
+        static string GetOutputFile()
+        {
+            string dirDebug = System.IO.Directory.GetCurrentDirectory();
+            string dirProject = dirDebug;
+            string fileName = ConfigurationManager.AppSettings["template_filename"];
+
+            for (int counter_slash = 0; counter_slash < 2; counter_slash++)
+            {
+                dirProject = dirProject.Substring(0, dirProject.LastIndexOf(@"\"));
+            }
+            dirProject = string.Concat(dirProject, "\\", fileName);
+            return dirProject;
+        }
     }
 
 }
