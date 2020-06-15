@@ -14,10 +14,7 @@ namespace AzureRepoStatistics
 
     public class GitApi
     {
-        private string _apiUrl;
-        private string _owner;
-        private string _repo;
-        private string _token;
+        private string _apiUrl, _owner, _repo, _notesRepo, _token;
         private HttpClient _client;
         DataTable _dt = new DataTable();
 
@@ -26,6 +23,7 @@ namespace AzureRepoStatistics
             _apiUrl = ConfigurationManager.AppSettings["api_url"];
             _owner = ConfigurationManager.AppSettings["api_owner"];
             _repo = ConfigurationManager.AppSettings["repo_name"];
+            _notesRepo = ConfigurationManager.AppSettings["notes_repo_name"];
             _token = ConfigurationManager.AppSettings["api_token"];
 
         }
@@ -68,9 +66,13 @@ namespace AzureRepoStatistics
             SetupDataTable();
             SearchRepo(startDate);
             SearchRepo(endDate);
+
+            SearchNotesRepo(startDate);
+            SearchNotesRepo(endDate);
+
             return _dt; 
         }
-        public DataTable SearchRepo(DateTime date)
+        public void SearchRepo(DateTime date)
         {
             Console.WriteLine(string.Format("Fetching {0} from {1} Repo", date.ToShortDateString(), _repo));
 
@@ -127,9 +129,62 @@ namespace AzureRepoStatistics
                 }
             }
 
-            return _dt;
         }
+        public void SearchNotesRepo(DateTime date)
+        {
 
+            Console.WriteLine(string.Format("Fetching {0} from {1} Repo", date.ToShortDateString(), _notesRepo));
+
+            string query = string.Format("search/issues?q=repo:{0}/{1}+is:pr+is:merged+sort:author-date-asc+merged:%3E={2}&sort=merged", _owner, _notesRepo, date.ToString("yyyy-MM-dd"));
+            _client = new HttpClient();
+            _client.BaseAddress = new Uri(_apiUrl);
+            _client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue(_repo, "1.0"));
+            _client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Token", _token);
+            var getTasks = _client.GetAsync(query);
+            getTasks.Wait();
+            var result = getTasks.Result;
+            if (getTasks.IsCompleted)
+            {
+                var readTask = result.Content.ReadAsStringAsync();
+                SearchResult response = JsonConvert.DeserializeObject<SearchResult>(readTask.Result);
+                foreach (var item in response.items)
+                {
+
+
+                    //Add count on all folders which has been changed.
+                    List<PullFile> files = GetPullFiles(item.pull_request.url);
+                    int total = 0;
+                    User user = GetUser(item.user.url);
+                    foreach (var file in files)
+                    {
+                        string folder = GetParentFolder(file.filename);
+                        if (file.status == "added" || file.status == "modified")
+                        {
+                            DataRow dr = _dt.NewRow();
+                            dr["ActivityDate"] = item.closed_at.ToShortDateString(); //only date 
+                            dr["GitUser"] = item.user.login;
+                            dr["Status"] = file.status;
+                            dr["Notebooks @ efbace2"] = 1;
+                            dr["TotalContribution"] = 1;
+
+                            string email = (user.email == null ? "" : user.email.ToLower());
+                            string company = (user.company == null ? "" : user.company.ToLower());
+                            //Check if External or MSFT user
+                            if (email.Contains("microsoft") || company.Contains("microsoft"))
+                                dr["AccountType"] = "MSFT";
+                            else
+                                dr["AccountType"] = "External";
+
+                            total++;
+                            _dt.Rows.Add(dr);
+                        }
+                    }
+
+                }
+            }
+
+        }
 
         List<PullFile> GetPullFiles(string url)
         {

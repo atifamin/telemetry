@@ -20,7 +20,7 @@ namespace AzureRepoStatistics
     {
         private static Microsoft.Office.Interop.Excel.Workbook mWorkBook;
         private static Microsoft.Office.Interop.Excel.Sheets mWorkSheets;
-        private static Microsoft.Office.Interop.Excel.Worksheet mWSheet1;
+        private static Microsoft.Office.Interop.Excel.Worksheet mWSheet;
         private static Microsoft.Office.Interop.Excel.Application oXL;
         static void Main(string[] args)
         {
@@ -30,7 +30,7 @@ namespace AzureRepoStatistics
         static void ConnectRepo()
         {
 
-
+            //DateTime endDate = DateTime.Now;
             DateTime endDate = new DateTime(2020, 6, 8);//DateTime.Now;
             DateTime startDate = endDate.AddDays(-1);
 
@@ -38,9 +38,23 @@ namespace AzureRepoStatistics
 
             DataTable data = api.ProcessRepo(startDate,endDate);
 
-
-
             //added files datatable 
+            DataRow[] rows = data.Select(string.Format("Status ='modified' AND ActivityDate='{0}'", startDate.ToString("yyyy-MM-dd")));
+            if (rows.Count() == 0)
+            {
+                var row = data.NewRow();
+                row["ActivityDate"] = startDate;
+                row["Status"] = "added";
+                data.Rows.Add(row);
+            }
+            rows = data.Select(string.Format("Status ='modified' AND ActivityDate='{0}'", endDate.ToString("yyyy-MM-dd")));
+            if (rows.Count() == 0)
+            {
+                var row = data.NewRow();
+                row["ActivityDate"] = endDate;
+                row["Status"] = "added";
+                data.Rows.Add(row);
+            }
             DataTable dataFilter = data.Select("Status ='added'").CopyToDataTable();
             DataTable dataAdded = dataFilter.AsEnumerable()
                           .GroupBy(g => new { ActivityDate = g["ActivityDate"], GitUser = g["GitUser"], AccountType = g["AccountType"] })
@@ -48,7 +62,6 @@ namespace AzureRepoStatistics
                           .Select(s =>
                           {
                               var row = data.NewRow();
-
                               row["ActivityDate"] = s.Key.ActivityDate;
                               row["GitUser"] = s.Key.GitUser;
                               row["AccountType"] = s.Key.AccountType;
@@ -67,6 +80,25 @@ namespace AzureRepoStatistics
                           .CopyToDataTable();
 
             //modified files datatable 
+            //create empty rows if dates note found.
+            rows = data.Select(string.Format("Status ='modified' AND ActivityDate='{0}'", startDate.ToString("yyyy-MM-dd")));
+            if (rows.Count() == 0)
+            {
+                var row = data.NewRow();
+                row["ActivityDate"] = startDate;
+                row["Status"] = "modified";
+                data.Rows.Add(row);
+            }
+            rows = data.Select(string.Format("Status ='modified' AND ActivityDate='{0}'", endDate.ToString("yyyy-MM-dd")));
+            if (rows.Count() == 0)
+            {
+                var row = data.NewRow();
+                row["ActivityDate"] = endDate;
+                row["AccountType"] = "modified";
+                data.Rows.Add(row);
+            }
+
+
             dataFilter = data.Select("Status ='modified'").CopyToDataTable();
             DataTable dataModified = dataFilter.AsEnumerable()
                           .GroupBy(g => new { ActivityDate = g["ActivityDate"], GitUser = g["GitUser"], AccountType = g["AccountType"] })
@@ -74,7 +106,6 @@ namespace AzureRepoStatistics
                           .Select(s =>
                           {
                               var row = data.NewRow();
-
                               row["ActivityDate"] = s.Key.ActivityDate;
                               row["GitUser"] = s.Key.GitUser;
                               row["AccountType"] = s.Key.AccountType;
@@ -88,7 +119,6 @@ namespace AzureRepoStatistics
                               row["Tools"] = s.Sum(r => r.Field<int>("Tools"));
                               row["Detections"] = s.Sum(r => r.Field<int>("Detections"));
                               row["Notebooks @ efbace2"] = s.Sum(r => r.Field<int>("Notebooks @ efbace2"));
-
                               return row;
                           })
                           .CopyToDataTable();
@@ -101,6 +131,7 @@ namespace AzureRepoStatistics
         static void ExportToExcel(DataTable dataAdded, DataTable dataModified)
         {
             Console.WriteLine("Writing to Excel file");
+
             string fileName = ConfigurationManager.AppSettings["template_filename"];
             string path = string.Concat(System.IO.Directory.GetCurrentDirectory(), fileName);
             oXL = new Microsoft.Office.Interop.Excel.Application();
@@ -111,52 +142,54 @@ namespace AzureRepoStatistics
             mWorkSheets = mWorkBook.Worksheets;
 
             //Write to New Contribution
-            mWSheet1 = (Microsoft.Office.Interop.Excel.Worksheet)mWorkSheets.get_Item("GitHub New Contribution");
-            Microsoft.Office.Interop.Excel.Range range = mWSheet1.UsedRange;
-            int colCount = range.Columns.Count;
+            mWSheet = (Microsoft.Office.Interop.Excel.Worksheet)mWorkSheets.get_Item("GitHub New Contribution");
+            Microsoft.Office.Interop.Excel.Range range = mWSheet.UsedRange;
             int rowCount = range.Rows.Count;
             int index = 1;
             foreach (DataRow item in dataAdded.Rows)
             {
-                mWSheet1.Cells[rowCount+ index, 1] = item["ActivityDate"];
-                mWSheet1.Cells[rowCount + index, 2] = item["GitUser"];
-                mWSheet1.Cells[rowCount + index, 3] = item["AccountType"];
-                mWSheet1.Cells[rowCount + index, 4] = item["TotalContribution"];
-                mWSheet1.Cells[rowCount + index, 5] = item["DataConnectors"];
-                mWSheet1.Cells[rowCount + index, 6] = item["Workbooks"];
-                mWSheet1.Cells[rowCount + index, 7] = item["Playbooks"];
-                mWSheet1.Cells[rowCount + index, 8] = item["Exploration Queries"];
-                mWSheet1.Cells[rowCount + index, 9] = item["Hunting Queries"];
-                mWSheet1.Cells[rowCount + index, 10] = item["Sample Data"];
-                mWSheet1.Cells[rowCount + index, 11] = item["Tools"];
-                mWSheet1.Cells[rowCount + index, 12] = item["Detections"];
-                mWSheet1.Cells[rowCount + index, 13] = item["Notebooks @ efbace2"];
+                mWSheet.Cells[rowCount+ index, 1] = item["ActivityDate"];
+                mWSheet.Cells[rowCount + index, 2] = item["GitUser"];
+                mWSheet.Cells[rowCount + index, 3] = item["AccountType"];
+                mWSheet.Cells[rowCount + index, 4] = item["TotalContribution"];
+                mWSheet.Cells[rowCount + index, 5] = item["DataConnectors"];
+                mWSheet.Cells[rowCount + index, 6] = item["Workbooks"];
+                mWSheet.Cells[rowCount + index, 7] = item["Playbooks"];
+                mWSheet.Cells[rowCount + index, 8] = item["Exploration Queries"];
+                mWSheet.Cells[rowCount + index, 9] = item["Hunting Queries"];
+                mWSheet.Cells[rowCount + index, 10] = item["Sample Data"];
+                mWSheet.Cells[rowCount + index, 11] = item["Tools"];
+                mWSheet.Cells[rowCount + index, 12] = item["Detections"];
+                mWSheet.Cells[rowCount + index, 13] = item["Notebooks @ efbace2"];
                 index++;
             }
 
             //Write to Update Contribution
-            mWSheet1 = (Microsoft.Office.Interop.Excel.Worksheet)mWorkSheets.get_Item("GitHub Update Contribution");
+            mWSheet = (Microsoft.Office.Interop.Excel.Worksheet)mWorkSheets.get_Item("GitHub Update Contribution");
+            range = mWSheet.UsedRange;
+            rowCount = range.Rows.Count;
+
             index = 1;
             foreach (DataRow item in dataModified.Rows)
             {
-                mWSheet1.Cells[rowCount + index, 1] = item["ActivityDate"];
-                mWSheet1.Cells[rowCount + index, 2] = item["GitUser"];
-                mWSheet1.Cells[rowCount + index, 3] = item["AccountType"];
-                mWSheet1.Cells[rowCount + index, 4] = item["TotalContribution"];
-                mWSheet1.Cells[rowCount + index, 5] = item["DataConnectors"];
-                mWSheet1.Cells[rowCount + index, 6] = item["Workbooks"];
-                mWSheet1.Cells[rowCount + index, 7] = item["Playbooks"];
-                mWSheet1.Cells[rowCount + index, 8] = item["Exploration Queries"];
-                mWSheet1.Cells[rowCount + index, 9] = item["Hunting Queries"];
-                mWSheet1.Cells[rowCount + index, 10] = item["Sample Data"];
-                mWSheet1.Cells[rowCount + index, 11] = item["Tools"];
-                mWSheet1.Cells[rowCount + index, 12] = item["Detections"];
-                mWSheet1.Cells[rowCount + index, 13] = item["Notebooks @ efbace2"];
+                mWSheet.Cells[rowCount + index, 1] = item["ActivityDate"];
+                mWSheet.Cells[rowCount + index, 2] = item["GitUser"];
+                mWSheet.Cells[rowCount + index, 3] = item["AccountType"];
+                mWSheet.Cells[rowCount + index, 4] = item["TotalContribution"];
+                mWSheet.Cells[rowCount + index, 5] = item["DataConnectors"];
+                mWSheet.Cells[rowCount + index, 6] = item["Workbooks"];
+                mWSheet.Cells[rowCount + index, 7] = item["Playbooks"];
+                mWSheet.Cells[rowCount + index, 8] = item["Exploration Queries"];
+                mWSheet.Cells[rowCount + index, 9] = item["Hunting Queries"];
+                mWSheet.Cells[rowCount + index, 10] = item["Sample Data"];
+                mWSheet.Cells[rowCount + index, 11] = item["Tools"];
+                mWSheet.Cells[rowCount + index, 12] = item["Detections"];
+                mWSheet.Cells[rowCount + index, 13] = item["Notebooks @ efbace2"];
                 index++;
             }
             mWorkBook.Save();
             mWorkBook.Close(Missing.Value, Missing.Value, Missing.Value);
-            mWSheet1 = null;
+            mWSheet = null;
             mWorkBook = null;
             oXL.Quit();
             GC.WaitForPendingFinalizers();
