@@ -32,7 +32,7 @@ namespace AzureRepoStatistics
 
             DateTime endDate = DateTime.Now;
             //DateTime endDate = new DateTime(2020, 6, 8);
-            DateTime startDate = endDate.AddDays(-1);
+            DateTime startDate = endDate.AddDays(-5);
 
             GitApi api = new GitApi();
 

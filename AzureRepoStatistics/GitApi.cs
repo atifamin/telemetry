@@ -67,13 +67,18 @@ namespace AzureRepoStatistics
             SetupDataTable();
 
             DateTime date = startDate;
-            while (date <= endDate)
-            {
-                SearchRepo(date,startDate,endDate);
-                SearchNotesRepo(date,startDate,endDate);
-                date = date.AddDays(1);
 
-            }
+            SearchRepo(startDate, startDate, endDate);
+            SearchNotesRepo(startDate,startDate,endDate);
+
+
+            //while (date <= endDate)
+            //{
+            //    SearchRepo(date,startDate,endDate);
+            //    SearchNotesRepo(date,startDate,endDate);
+            //    date = date.AddDays(1);
+
+            //}
 
             //SearchRepo(startDate);
             //SearchRepo(endDate);
@@ -87,7 +92,7 @@ namespace AzureRepoStatistics
         {
             Console.WriteLine(string.Format("Fetching {0} from {1} Repo", date.ToShortDateString(), _repo));
 
-            string query = string.Format("search/issues?q=repo:{0}/{1}+is:pr+is:merged+sort:author-date-asc+merged:%3E={2}&sort=merged", _owner, _repo, date.ToString("yyyy-MM-dd"));
+            string query = string.Format("search/issues?q=repo:{0}/{1}+is:pr+is:merged+sort:author-date-asc+merged:>={2}&sort=merged", _owner, _repo, date.ToString("yyyy-MM-dd"));
             _client = new HttpClient();
             _client.BaseAddress = new Uri(_apiUrl);
             _client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue(_repo, "1.0"));
@@ -147,7 +152,7 @@ namespace AzureRepoStatistics
 
             Console.WriteLine(string.Format("Fetching {0} from {1} Repo", date.ToShortDateString(), _notesRepo));
 
-            string query = string.Format("search/issues?q=repo:{0}/{1}+is:pr+is:merged+sort:author-date-asc+merged:%3E={2}&sort=merged", _owner, _notesRepo, date.ToString("yyyy-MM-dd"));
+            string query = string.Format("search/issues?q=repo:{0}/{1}+is:pr+is:merged+sort:author-date-asc+merged:>={2}&sort=merged", _owner, _notesRepo, date.ToString("yyyy-MM-dd"));
             _client = new HttpClient();
             _client.BaseAddress = new Uri(_apiUrl);
             _client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue(_repo, "1.0"));
@@ -170,27 +175,30 @@ namespace AzureRepoStatistics
                     User user = GetUser(item.user.url);
                     foreach (var file in files)
                     {
-                        string folder = GetParentFolder(file.filename);
-                        if (file.status == "added" || file.status == "modified")
+                        //string folder = GetParentFolder(file.filename);
+                        if (!file.filename.ToLower().Contains(".png") && !file.filename.ToLower().Contains(".svg"))
                         {
-                            DataRow dr = _dt.NewRow();
-                            dr["StartDate"] = startDate.ToShortDateString(); //only date 
-                            dr["EndDate"] = endDate.ToShortDateString(); //only date 
-                            dr["GitUser"] = item.user.login;
-                            dr["Status"] = file.status;
-                            dr["Notebooks @ efbace2"] = 1;
-                            dr["TotalContribution"] = 1;
+                            if (file.status == "added" || file.status == "modified")
+                            {
+                                DataRow dr = _dt.NewRow();
+                                dr["StartDate"] = startDate.ToShortDateString(); //only date 
+                                dr["EndDate"] = endDate.ToShortDateString(); //only date 
+                                dr["GitUser"] = item.user.login;
+                                dr["Status"] = file.status;
+                                dr["Notebooks @ efbace2"] = 1;
+                                dr["TotalContribution"] = 1;
 
-                            string email = (user.email == null ? "" : user.email.ToLower());
-                            string company = (user.company == null ? "" : user.company.ToLower());
-                            //Check if External or MSFT user
-                            if (email.Contains("microsoft") || company.Contains("microsoft"))
-                                dr["AccountType"] = "MSFT";
-                            else
-                                dr["AccountType"] = "External";
+                                string email = (user.email == null ? "" : user.email.ToLower());
+                                string company = (user.company == null ? "" : user.company.ToLower());
+                                //Check if External or MSFT user
+                                if (email.Contains("microsoft") || company.Contains("microsoft"))
+                                    dr["AccountType"] = "MSFT";
+                                else
+                                    dr["AccountType"] = "External";
 
-                            total++;
-                            _dt.Rows.Add(dr);
+                                total++;
+                                _dt.Rows.Add(dr);
+                            }
                         }
                     }
 
