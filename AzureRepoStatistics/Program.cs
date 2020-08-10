@@ -1,18 +1,12 @@
-﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+﻿using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Blob;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
-using System.Linq;
-using System.Net.Http;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.Azure;
-using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Blob;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 
 namespace AzureRepoStatistics
 {
@@ -24,6 +18,7 @@ namespace AzureRepoStatistics
         private static Microsoft.Office.Interop.Excel.Application oXL;
         static void Main(string[] args)
         {
+
             ConnectRepo();
             UploadToAzureBlob();
         }
@@ -31,8 +26,8 @@ namespace AzureRepoStatistics
         {
 
             DateTime endDate = DateTime.Now;
-            //DateTime endDate = new DateTime(2020, 6, 8);
-            DateTime startDate = endDate.AddDays(-5);
+            DateTime startDate = new DateTime(2020, 7, 1);
+            //DateTime startDate = endDate.AddDays(-7);
 
             GitApi api = new GitApi();
 
@@ -207,10 +202,10 @@ namespace AzureRepoStatistics
             CloudBlobContainer cloudBlobContainer = cloudBlobClient.GetContainerReference(storageContainer);
 
             //create a container if it is not already exists
-            if (cloudBlobContainer.CreateIfNotExists())
-            {
-                cloudBlobContainer.SetPermissionsAsync(new BlobContainerPermissions { PublicAccess = BlobContainerPublicAccessType.Blob });
-            }
+            //if (cloudBlobContainer.CreateIfNotExists())
+            //{
+            //    cloudBlobContainer.SetPermissionsAsync(new BlobContainerPermissions { PublicAccess = BlobContainerPublicAccessType.Blob });
+            //}
 
 
             var file = System.IO.File.OpenRead(filePath);
@@ -220,8 +215,8 @@ namespace AzureRepoStatistics
             CloudBlockBlob cloudBlockBlob = cloudBlobContainer.GetBlockBlobReference(name);
             cloudBlockBlob.Properties.ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             // Upload using the UploadFromStream method.
-            using (var stream = System.IO.File.OpenRead(filePath))
-                cloudBlockBlob.UploadFromStream(stream, stream.Length, null, null, null);
+            //using (var stream = System.IO.File.OpenRead(filePath))
+            //    cloudBlockBlob.UploadFromStream(stream, stream.Length, null, null, null);
             
 
 
@@ -248,6 +243,8 @@ namespace AzureRepoStatistics
             dirProject = string.Concat(dirProject, "\\", fileName);
             return dirProject;
         }
+
+
     }
 
 }

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -17,7 +18,8 @@ namespace AzureRepoStatistics
         private string _apiUrl, _owner, _repo, _notesRepo, _token;
         private HttpClient _client;
         DataTable _dt = new DataTable();
-
+        List<string> _dataArray= new List<string>();
+        private decimal _pageSize = 100;
         public GitApi()
         {
             _apiUrl = ConfigurationManager.AppSettings["api_url"];
@@ -67,7 +69,7 @@ namespace AzureRepoStatistics
             SetupDataTable();
 
             DateTime date = startDate;
-
+            _dataArray = GetTxtFileLines();
             SearchRepo(startDate, startDate, endDate);
             SearchNotesRepo(startDate,startDate,endDate);
 
@@ -90,9 +92,9 @@ namespace AzureRepoStatistics
         }
         public void SearchRepo(DateTime date,DateTime startDate, DateTime endDate)
         {
-            Console.WriteLine(string.Format("Fetching {0} from {1} Repo", date.ToShortDateString(), _repo));
+            Console.WriteLine(string.Format("Fetching contributions from {1} Repo", date.ToShortDateString(), _repo));
 
-            string query = string.Format("search/issues?q=repo:{0}/{1}+is:pr+is:merged+sort:author-date-asc+merged:>={2}&sort=merged", _owner, _repo, date.ToString("yyyy-MM-dd"));
+            string query = string.Format("search/issues?q=repo:{0}/{1}+is:pr+is:merged+sort:author-date-asc+merged:>={2}&sort=merged&per_page={3}", _owner, _repo, date.ToString("yyyy-MM-dd"), _pageSize);
             _client = new HttpClient();
             _client.BaseAddress = new Uri(_apiUrl);
             _client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue(_repo, "1.0"));
@@ -105,54 +107,64 @@ namespace AzureRepoStatistics
             {
                 var readTask = result.Content.ReadAsStringAsync();
                 SearchResult response = JsonConvert.DeserializeObject<SearchResult>(readTask.Result);
-                foreach (var item in response.items)
+                
+                decimal pageCount = Math.Ceiling(Convert.ToDecimal(response.total_count) / _pageSize); 
+                for (int pageNo = 1; pageNo <= pageCount; pageNo++)
                 {
-
-
-                    //Add count on all folders which has been changed.
-                    List<PullFile> files = GetPullFiles(item.pull_request.url);
-                    int total = 0;
-                    User user = GetUser(item.user.url);
-                    foreach (var file in files)
+                    query = string.Format("search/issues?q=repo:{0}/{1}+is:pr+is:merged+sort:author-date-asc+merged:>={2}&sort=merged&per_page={3}&page={4}", _owner, _repo, date.ToString("yyyy-MM-dd"),_pageSize, pageNo);
+                    var apiTasks = _client.GetAsync(query);
+                    apiTasks.Wait();
+                    var apiResult = apiTasks.Result;
+                    if (apiTasks.IsCompleted)
                     {
-                        string folder = GetParentFolder(file.filename);
-                        if (_dt.Columns.Contains(folder))
+                        var apiReadTask = apiResult.Content.ReadAsStringAsync();
+                        SearchResult apiResponse = JsonConvert.DeserializeObject<SearchResult>(apiReadTask.Result);
+
+                        foreach (var item in apiResponse.items)
                         {
-                            if (file.status == "added" || file.status == "modified")
+                            //Add count on all folders which has been changed.
+                            List<PullFile> files = GetPullFiles(item.pull_request.url);
+                            int total = 0;
+                            User user = GetUser(item.user.url);
+                            foreach (var file in files)
                             {
-                                DataRow dr = _dt.NewRow();
-                                dr["StartDate"] = startDate.ToShortDateString(); //only date 
-                                dr["EndDate"] = endDate.ToShortDateString(); //only date 
-                                dr["GitUser"] = item.user.login;
-                                dr["Status"] = file.status;
-                                dr[folder] = 1;
-                                dr["TotalContribution"] = 1;
-                                //Get User info
-
-                                string email = (user.email == null ? "" : user.email.ToLower());
-                                string company = (user.company == null ? "" : user.company.ToLower());
-                                //Check if External or MSFT user
-                                if (email.Contains("microsoft") || company.Contains("microsoft") || company.Equals("msft") || company.Equals("ms"))
-                                    dr["AccountType"] = "MSFT";
-                                else
-                                    dr["AccountType"] = "External";
-
-                                total++;
-                                _dt.Rows.Add(dr);
+                                string folder = GetParentFolder(file.filename);
+                                if (_dt.Columns.Contains(folder))
+                                {
+                                    if (file.status == "added" || file.status == "modified")
+                                    {
+                                        DataRow dr = _dt.NewRow();
+                                        dr["StartDate"] = startDate.ToShortDateString(); //only date 
+                                        dr["EndDate"] = endDate.ToShortDateString(); //only date 
+                                        dr["GitUser"] = item.user.login;
+                                        dr["Status"] = file.status;
+                                        dr[folder] = 1;
+                                        dr["TotalContribution"] = 1;
+                                        
+                                        string email = (user.email == null ? "" : user.email.ToLower());
+                                        string company = (user.company == null ? "" : user.company.ToLower());
+                                        //Check if External or MSFT user
+                                        // if user.name is in _dataArray then account = MSFT else External
+                                        if (_dataArray.Contains(item.user.login))
+                                            dr["AccountType"] = "MSFT";
+                                        else
+                                            dr["AccountType"] = "External";
+                                        total++;
+                                        _dt.Rows.Add(dr);
+                                    }
+                                }
                             }
+
                         }
                     }
 
                 }
             }
-
         }
         public void SearchNotesRepo(DateTime date,DateTime startDate,DateTime endDate)
         {
-
-            Console.WriteLine(string.Format("Fetching {0} from {1} Repo", date.ToShortDateString(), _notesRepo));
-
-            string query = string.Format("search/issues?q=repo:{0}/{1}+is:pr+is:merged+sort:author-date-asc+merged:>={2}&sort=merged", _owner, _notesRepo, date.ToString("yyyy-MM-dd"));
+            Console.WriteLine(string.Format("Fetching contributions from {1} Repo", date.ToShortDateString(), _notesRepo));
+            string query = string.Format("search/issues?q=repo:{0}/{1}+is:pr+is:merged+sort:author-date-asc+merged:>={2}&sort=merged&page_size={3}", _owner, _notesRepo, date.ToString("yyyy-MM-dd"),_pageSize);
             _client = new HttpClient();
             _client.BaseAddress = new Uri(_apiUrl);
             _client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue(_repo, "1.0"));
@@ -165,44 +177,60 @@ namespace AzureRepoStatistics
             {
                 var readTask = result.Content.ReadAsStringAsync();
                 SearchResult response = JsonConvert.DeserializeObject<SearchResult>(readTask.Result);
-                foreach (var item in response.items)
+                //int pageSize = 100;
+                decimal pageCount = Math.Ceiling(Convert.ToDecimal(response.total_count) / _pageSize); 
+                for (int pageNo = 1; pageNo <= pageCount; pageNo++)
                 {
-
-
-                    //Add count on all folders which has been changed.
-                    List<PullFile> files = GetPullFiles(item.pull_request.url);
-                    int total = 0;
-                    User user = GetUser(item.user.url);
-                    foreach (var file in files)
+                    query = string.Format("search/issues?q=repo:{0}/{1}+is:pr+is:merged+sort:author-date-asc+merged:>={2}&sort=merged&per_page={3}&page={4}", _owner, _repo, date.ToString("yyyy-MM-dd"), _pageSize, pageNo);
+                    var apiTasks = _client.GetAsync(query);
+                    apiTasks.Wait();
+                    result = apiTasks.Result;
+                    if (apiTasks.IsCompleted)
                     {
-                        //string folder = GetParentFolder(file.filename);
-                        if (!file.filename.ToLower().Contains(".png") && !file.filename.ToLower().Contains(".svg"))
+                        readTask = result.Content.ReadAsStringAsync();
+                        response = JsonConvert.DeserializeObject<SearchResult>(readTask.Result);
+                        foreach (var item in response.items)
                         {
-                            if (file.status == "added" || file.status == "modified")
+                            //Add count on all folders which has been changed.
+                            List<PullFile> files = GetPullFiles(item.pull_request.url);
+                            int total = 0;
+                            User user = GetUser(item.user.url);
+                            foreach (var file in files)
                             {
-                                DataRow dr = _dt.NewRow();
-                                dr["StartDate"] = startDate.ToShortDateString(); //only date 
-                                dr["EndDate"] = endDate.ToShortDateString(); //only date 
-                                dr["GitUser"] = item.user.login;
-                                dr["Status"] = file.status;
-                                dr["Notebooks @ efbace2"] = 1;
-                                dr["TotalContribution"] = 1;
+                                //string folder = GetParentFolder(file.filename);
+                                if (!file.filename.ToLower().Contains(".png") && !file.filename.ToLower().Contains(".svg"))
+                                {
+                                    if (file.status == "added" || file.status == "modified")
+                                    {
+                                        DataRow dr = _dt.NewRow();
+                                        dr["StartDate"] = startDate.ToShortDateString(); //only date 
+                                        dr["EndDate"] = endDate.ToShortDateString(); //only date 
+                                        dr["GitUser"] = item.user.login;
+                                        dr["Status"] = file.status;
+                                        dr["Notebooks @ efbace2"] = 1;
+                                        dr["TotalContribution"] = 1;
 
-                                string email = (user.email == null ? "" : user.email.ToLower());
-                                string company = (user.company == null ? "" : user.company.ToLower());
-                                //Check if External or MSFT user
-                                if (email.Contains("microsoft") || company.Contains("microsoft") || company.Equals("msft") || company.Equals("ms"))
-                                    dr["AccountType"] = "MSFT";
-                                else
-                                    dr["AccountType"] = "External";
+                                        string email = (user.email == null ? "" : user.email.ToLower());
+                                        string company = (user.company == null ? "" : user.company.ToLower());
+                                        //Check if External or MSFT user
+                                       
+                                        // if user.name is in list then account = MSFT else External
+                                        if (_dataArray.Contains(item.user.login))
+                                            dr["AccountType"] = "MSFT";
+                                        else
+                                            dr["AccountType"] = "External";
 
-                                total++;
-                                _dt.Rows.Add(dr);
+                                        total++;
+                                        _dt.Rows.Add(dr);
+                                    }
+                                }
                             }
+
                         }
                     }
 
                 }
+                    
             }
 
         }
@@ -252,7 +280,7 @@ namespace AzureRepoStatistics
             _client.BaseAddress = new Uri(_apiUrl);
             _client.DefaultRequestHeaders.Add("User-Agent", "git-hub");
             var pullRquest = _client.GetAsync(url);
-            pullRquest.Wait();
+            pullRquest.Wait();  
             var result = pullRquest.Result;
             if (pullRquest.IsCompleted)
             {
@@ -264,6 +292,32 @@ namespace AzureRepoStatistics
             }
             else
                 return null;
+        }
+        public static List<string> GetTxtFileLines()
+        {
+            string directory = System.IO.Directory.GetCurrentDirectory();
+            for (int counter_slash = 0; counter_slash < 2; counter_slash++)
+            {
+                directory = directory.Substring(0, directory.LastIndexOf(@"\"));
+            }
+            string filePath = string.Concat(directory, "\\names.txt");
+
+            List<string> result = new List<string>(); // A list of strings 
+            // Create a stream reader object to read txt file.
+            using (StreamReader reader = new StreamReader(filePath))
+            {
+                string line = string.Empty; // Contains a single line returned by the stream reader object.
+                // While there are lines in the file, read a line into the line variable.
+                while ((line = reader.ReadLine()) != null)
+                {
+                    // If the line is not empty, add it to the list.
+                    if (line != string.Empty)
+                    {
+                        result.Add(line);
+                    }
+                }
+            }
+            return result;
         }
     }
 
